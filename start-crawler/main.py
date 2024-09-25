@@ -23,7 +23,7 @@ def update_sql(table_name: str, file_type: str):
         print("Unrecognized file type:", file_type)
         return
     
-    print("Updated SQL database")
+    print(f"Updated SQL database for { file_type }_{ table_name }")
     
 def wait_crawler(crawler_name: str, table_name: str, file_type: str):
     start_time = time.time()
