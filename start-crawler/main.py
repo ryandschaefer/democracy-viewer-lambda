@@ -35,7 +35,7 @@ def wait_crawler(crawler_name: str, table_name: str, file_type: str):
         curr_time = humanize.precisedelta(dt.timedelta(seconds = time.time() - start_time))
         print(f"{ curr_time }: Crawler state: { state }")
         
-        if state == "READY":
+        if state in ["READY", "STOPPING"]:
             print("Crawler run complete")
             update_sql(table_name, file_type)
             return
