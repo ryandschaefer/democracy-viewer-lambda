@@ -45,8 +45,7 @@ def wait_crawler(crawler_name: str, table_name: str, file_type: str):
 def lambda_handler(event, context):
     attempts = 0
     crawler_name = os.environ.get("CRAWLER_NAME")
-    # key = event["Records"][0]["s3"]["object"]["key"]
-    key = "tables/datasets_test"
+    key = event["Records"][0]["s3"]["object"]["key"]
     table_name = key.split("/")[-1].replace(".parquet", "")
     if key.startswith("tables/datasets_"):
         file_type = "datasets"
@@ -88,4 +87,3 @@ def lambda_handler(event, context):
             
     print("Crawler failed after 5 attempts")
     
-lambda_handler("", "")
