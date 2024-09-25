@@ -18,7 +18,7 @@ def update_sql(table_name: str, file_type: str):
     elif file_type == "tokens":
         sql.complete_processing(engine, table_name, "tokens")
     else:
-        print("Unrecognized file type:", key)
+        print("Unrecognized file type:", file_type)
         return
     
 def wait_crawler(crawler_name: str, table_name: str, file_type: str):
