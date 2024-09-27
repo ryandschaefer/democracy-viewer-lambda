@@ -1,0 +1,7 @@
+Dear [[name]],
+
+Your dataset [[title]] has been uploaded! Processing will begin soon and you will receive another email when that has completed.
+
+You may now use subset search to view records in this dataset, but graphing will be disabled until procesing is complete.
+
+- Democracy Viewer Team

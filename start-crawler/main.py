@@ -7,6 +7,7 @@ import time
 import util.athena_queries as athena
 import util.sql_queries as sql
 from util.sql_connect import sql_connect
+from util.email import send_email
 load_dotenv()
 
 engine, meta = sql_connect()
@@ -17,13 +18,26 @@ client = boto3.client(
 def update_sql(table_name: str, file_type: str):
     if file_type == "datasets":
         sql.complete_upload(engine, table_name)
+        template = "upload_complete"
+        subject = "Upload Complete"
     elif file_type == "tokens":
         sql.complete_processing(engine, table_name, "tokens")
+        template = "processing_complete"
+        subject = "Processing Complete"
     else:
         print("Unrecognized file type:", file_type)
         return
     
     print(f"Updated SQL database for { file_type }_{ table_name }")
+    
+    print("Sending confirmation email...")
+    metadata = sql.get_metadata(engine, meta, table_name)
+    user = sql.get_user(engine, meta, metadata["email"])
+    params = {
+        "title": metadata["title"]
+    }
+    send_email(template, params, subject, user["email"], user)
+    print("Email sent to", user["email"])
     
 def wait_crawler(crawler_name: str, table_name: str, file_type: str):
     start_time = time.time()
@@ -43,7 +57,6 @@ def wait_crawler(crawler_name: str, table_name: str, file_type: str):
             time.sleep(5)
 
 def lambda_handler(event, context):
-    attempts = 0
     crawler_name = os.environ.get("CRAWLER_NAME")
     key = event["Records"][0]["s3"]["object"]["key"]
     table_name = key.split("/")[-1].replace(".parquet", "")
@@ -56,9 +69,9 @@ def lambda_handler(event, context):
         return
     
     start_time = time.time()
-    while attempts < 5:
+    while True:
         if athena.table_exists(table_name, file_type):
-            print(f"{ file_type } already uploaded")
+            print(f"{ file_type }_{ table_name } already uploaded")
             update_sql(table_name, file_type)
             return
         
@@ -83,7 +96,4 @@ def lambda_handler(event, context):
         except:
             print("Trying again in 1 minute")
             time.sleep(60)
-            attempts += 1
-            
-    print("Crawler failed after 5 attempts")
     
