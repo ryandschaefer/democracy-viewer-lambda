@@ -79,21 +79,18 @@ def lambda_handler(event, context):
             Name = crawler_name
         )
         
-        try:
-            state = crawler["Crawler"]["State"]
-            curr_time = humanize.precisedelta(dt.timedelta(seconds = time.time() - start_time))
-            print(f"{ curr_time }: Crawler state: { state }")
-            
-            if state == "READY":
-                client.start_crawler(
-                    Name = crawler_name    
-                )
-                print("Crawler started")
-                wait_crawler(crawler_name, table_name, file_type)
-                return
-            else:
-                raise Exception()
-        except:
+        state = crawler["Crawler"]["State"]
+        curr_time = humanize.precisedelta(dt.timedelta(seconds = time.time() - start_time))
+        print(f"{ curr_time }: Crawler state: { state }")
+        
+        if state == "READY":
+            client.start_crawler(
+                Name = crawler_name    
+            )
+            print("Crawler started")
+            wait_crawler(crawler_name, table_name, file_type)
+            return
+        else:
             print("Trying again in 1 minute")
             time.sleep(60)
     
