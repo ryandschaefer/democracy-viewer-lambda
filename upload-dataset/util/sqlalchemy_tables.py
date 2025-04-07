@@ -12,8 +12,8 @@ class Users(SQL_BASE):
     last_name = Column("last_name", String(20))
     suffix = Column("suffix", String(10))
     orcid = Column("orcid", String(16))
-    linkedin_link = Column("linkedin_link", String(50))
-    website = Column("website", String(50))
+    linkedin_link = Column("linkedin_link", String(200))
+    website = Column("website", String(200))
 
 class DatasetMetadata(SQL_BASE):
     __tablename__ = "dataset_metadata"
@@ -37,11 +37,24 @@ class DatasetMetadata(SQL_BASE):
     unprocessed_updates = Column("unprocessed_updates", Integer)
     uploaded = Column("uploaded", Boolean)
     num_records = Column("num_records", Integer)
+    license = Column("license", String(200))
+    reprocess_start = Column("reprocess_start", Integer)
+    num_batches = Column("num_batches", Integer)
     
 class Tags(SQL_BASE):
     __tablename__ = "tags"
     table_name = Column("table_name", String(100), ForeignKey(DatasetMetadata.table_name), primary_key = True)
     col = Column("tag_name", String(25), primary_key = True)
+    
+class DatasetTempCols(SQL_BASE):
+    __tablename__ = "dataset_temp_cols"
+    table_name = Column("table_name", String(100), primary_key = True)
+    col = Column("col", String(50), primary_key = True)
+    
+class DatasetAllCols(SQL_BASE):
+    __tablename__ = "dataset_all_cols"
+    table_name = Column("table_name", String(100), ForeignKey(DatasetMetadata.table_name), primary_key = True)
+    col = Column("col", String(50), primary_key = True)
 
 class DatasetTextCols(SQL_BASE):
     __tablename__ = "dataset_text_cols"

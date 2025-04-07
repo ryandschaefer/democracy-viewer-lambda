@@ -1,5 +1,5 @@
 import datetime as dt
-import humanize
+import humanize as humanize
 import os
 from sqlalchemy import Engine, MetaData, create_engine
 from time import time
