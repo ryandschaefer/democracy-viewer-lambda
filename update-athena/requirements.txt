@@ -1,0 +1,5 @@
+humanize==4.12.2
+pyarrow==17.0.0
+PyMySQL==1.1.0
+python-dotenv==1.1.0
+SQLAlchemy==2.0.27

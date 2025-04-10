@@ -29,3 +29,6 @@ s3_client.upload_file(
     f"lambda/{ FOLDER }.zip",
     Config = config
 )
+
+print("File successfully uploaded to:\n")
+print(f"https://{ os.environ.get('S3_BUCKET') }.s3.us-east-2.amazonaws.com/lambda/{ FOLDER }.zip")
