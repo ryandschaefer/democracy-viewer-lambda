@@ -1,4 +1,5 @@
 from dotenv import load_dotenv
+import re
 import util.s3 as s3
 import util.sql_queries as sql
 from util.sql_connect import sql_connect
@@ -9,42 +10,46 @@ def lambda_handler(event, context):
     key = event["Records"][0]["s3"]["object"]["key"]
     # Extract table name from file name
     table_name = key.split("/")[-1].replace(".csv", "")
+    print(f"Table: { table_name }")
+    # Extract batch from table name
+    pattern = re.compile(r"([A-Za-z0-9]+(_[A-Za-z0-9]+)+)-[0-9]+")
+    if pattern.match(table_name):
+        batch_num = table_name.split("-")[-1]
+        table_name = table_name.replace(f"-{ batch_num }", "")
+        batch_num = int(batch_num)
+    else:
+        batch_num = None
+    print(f"Batch: { 'N/A' if batch_num is None else batch_num }")
   
     # Check if metadata exists for this table  
-    engine, meta = sql_connect()
-    try:
-        metadata = sql.get_metadata(engine, meta, table_name)
-    except Exception as err:
-        if str(err) == "Query failed":
-            metadata = None
-        else:
-            raise Exception(str(err))
+    # engine, meta = sql_connect()
+    # try:
+    #     metadata = sql.get_metadata(engine, meta, table_name)
+    # except Exception as err:
+    #     if str(err) == "Query failed":
+    #         metadata = None
+    #     else:
+    #         raise Exception(str(err))
     
     # Lazy load file
     df = s3.download(key)
-    # If metadata, batch upload
-    if metadata is not None:
-        # Make sure columns match
-        old_columns = sql.get_cols(engine, table_name).sort()
-        new_columns = df.collect_schema().names().sort()
-        
-        print("Old columns:", old_columns)
-        print("New columns:", new_columns)
-        
-        if str(old_columns) != str(new_columns):
-            raise Exception("Old and new columns do not match")
-        
-        columns = new_columns
-        batch_num = metadata["num_batches"] + 1
-        
-        sql.update_num_batches(engine, table_name, batch_num)
-    else:
-        # If no metadata, new dataset
-        columns = df.collect_schema().names()
-        columns.sort()
-        
-        sql.add_temp_cols(engine, table_name, columns)
-        batch_num = None
+    
+    # Extract column names
+    columns = df.collect_schema().names()
+    # Remove columns with no name and rename record_id column
+    for col in columns:
+        if len(col.strip()) == 0:
+            columns.remove(col)
+        elif col == "record_id":
+            columns.remove(col)
+            columns.append("record_id_")
+    # Sort columns for consistency
+    columns.sort()
+    print("Dataset columns:", columns)
+    
+    # Add columns to temp_cols
+    engine, meta = sql_connect()
+    sql.add_temp_cols(engine, table_name, columns)
         
 # lambda_handler({
 #   "Records": [
