@@ -1,8 +1,11 @@
 import boto3
+import datetime as dt
 from dotenv import load_dotenv
+import humanize
 import os
 import polars as pl
-import re
+import sys
+from time import time
 import util.s3 as s3
 import util.sql_queries as sql
 from util.sql_connect import sql_connect
@@ -12,6 +15,9 @@ engine, meta = sql_connect()
 
 # Check how many chunks the dataset should be broken into
 def data_split_batches(data: pl.DataFrame, table_name: str):
+    print("Splitting data into batches...")
+    start_time = time()
+    
     text_cols = sql.get_text_cols(engine, table_name)
     df = data.clone()
     
@@ -37,11 +43,15 @@ def data_split_batches(data: pl.DataFrame, table_name: str):
         if len(df_batch) > 0:
             # Add to list if at least one record
             all_batches.append(df_batch.drop(["text_col_length_", "text_col_length_cum_"]))
+            print(f"Batch { i }: { len(all_batches[i - 1]) } rows")
+            i += 1
         else:
             # Found all batches if no records
             
             # Return batches with the total text character length of this dataset
             total_length = df["text_col_length_"].sum()
+            print(f"Data split into { len(all_batches) } batches of { humanize.intcomma(batch_size) } characters")
+            print("Split time: {}".format(humanize.precisedelta(dt.timedelta(seconds = time() - start_time))))
             return all_batches, total_length
         
 # Function to submit a batch job to process a dataset or batch
@@ -85,24 +95,24 @@ def submit_batch_job(table_name: str, batch_num: int | None, total_length: int):
     print("Batch job submitted:")
     print(response)
         
-def lambda_handler(event, context):
-    # Get file name
-    key: str = event["Records"][0]["s3"]["object"]["key"]
-    # Extract table name from file name
-    table_name = key.split("/")[-1].replace(".csv", "")
-    print(f"Table: { table_name }")
-    # Extract batch from table name
-    pattern = re.compile(r"([A-Za-z0-9]+(_[A-Za-z0-9]+)+)-[0-9]+")
-    if pattern.match(table_name):
-        batch_num = table_name.split("-")[-1]
-        table_name = table_name.replace(f"-{ batch_num }", "")
-        batch_num = int(batch_num)
-    else:
+def main():
+    start_time = time()
+    
+    print("Loading data...")
+    # Get the table name and batch number from command line arguments
+    table_name = sys.argv[1]
+    try:
+        batch_num = int(sys.argv[2])
+    except:
         batch_num = None
-    print(f"Batch: { 'N/A' if batch_num is None else batch_num }")
     
     # Load data
-    df = s3.download(key).collect()
+    if batch_num is None:
+        path = f"temp_uploads/{ table_name }.csv"
+    else:
+        path = f"temp_uploads/{ table_name }-{ batch_num }.csv"
+    df = s3.download(path).collect()
+    print("Loading time: {}".format(humanize.precisedelta(dt.timedelta(seconds = time() - start_time))))
     
     # Rename any column called "record_id"
     if "record_id" in df.columns:
@@ -118,6 +128,8 @@ def lambda_handler(event, context):
     batches, total_length = data_split_batches(df, table_name)
     del df
     
+    print("Uploading batches to datasets folder...")
+    upload_time = time()
     if len(batches) == 1:
         # Dataset is small enough for only 1 batch
         df = batches[0]
@@ -137,6 +149,7 @@ def lambda_handler(event, context):
             
         for i, batch in enumerate(batches):
             s3.upload(batch, "datasets", table_name, batch_num + i)
+    print("Upload time: {}".format(humanize.precisedelta(dt.timedelta(seconds = time() - upload_time))))
             
     # Update the number of batches in sql
     if batch_num is not None:
@@ -144,3 +157,7 @@ def lambda_handler(event, context):
       
     # Submit processing job to batch      
     submit_batch_job(table_name, batch_num + 1, total_length)
+    
+    print("Total time: {}".format(humanize.precisedelta(dt.timedelta(seconds = time() - start_time))))
+
+main()

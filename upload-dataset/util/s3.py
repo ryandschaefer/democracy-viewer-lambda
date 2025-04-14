@@ -105,13 +105,12 @@ def download(name: str, token: str | None = None) -> pl.LazyFrame:
     distributed = get_creds(token)
         
     storage_options = {
-        "aws_access_key_id": distributed["key_"],
-        "aws_secret_access_key": distributed["secret"],
+        # "aws_access_key_id": distributed["key_"],
+        # "aws_secret_access_key": distributed["secret"],
         "aws_region": distributed["region"],
     }
     s3_path = "s3://{}/{}".format(distributed["bucket"], name)
-    print(s3_path)
-    df = pl.scan_csv(s3_path, storage_options=storage_options)
+    df = pl.scan_csv(s3_path, storage_options=storage_options, n_rows=1)
     
     return df
 

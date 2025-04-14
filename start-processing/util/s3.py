@@ -110,6 +110,7 @@ def download(name: str, token: str | None = None) -> pl.LazyFrame:
         "aws_region": distributed["region"],
     }
     s3_path = "s3://{}/{}".format(distributed["bucket"], name)
+    print(s3_path)
     df = pl.scan_csv(s3_path, storage_options=storage_options, infer_schema = False)
     
     return df

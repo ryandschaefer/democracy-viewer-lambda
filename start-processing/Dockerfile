@@ -1,11 +1,12 @@
 # Use AWS Lambda Python base image
-FROM public.ecr.aws/lambda/python:3.11
+FROM amazonlinux:latest
+
+# Set the working directory within docker image
+WORKDIR /usr/src/app
 
 # Add all files
 ADD . .
 
-# Install dependencies
-RUN pip install --upgrade pip && pip install -r requirements.txt
-
-# Set the CMD to your handler
-CMD ["main.lambda_handler"]
+# Install Python dependencies
+RUN yum install -y python3.11 python3.11-pip git
+RUN python3.11 -m pip install -r requirements.txt
