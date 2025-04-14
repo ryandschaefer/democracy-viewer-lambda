@@ -104,3 +104,17 @@ def update_num_batches(engine: Engine, table_name: str, batch_num: int):
     with engine.connect() as conn:
         conn.execute(query)
         conn.commit()
+        
+# Update metadata with number of records
+def set_num_records(engine: Engine, table_name: str, num_records: int) -> None:
+    query = (
+        update(DatasetMetadata)
+            .where(DatasetMetadata.table_name == table_name)
+            .values({
+                "num_records": num_records
+            })
+    )
+    
+    with engine.connect() as conn:
+        conn.execute(query)
+        conn.commit() 

@@ -50,7 +50,7 @@ def data_split_batches(data: pl.DataFrame, table_name: str):
             
             # Return batches with the total text character length of this dataset
             total_length = df["text_col_length_"].sum()
-            print(f"Data split into { len(all_batches) } batches of { humanize.intcomma(batch_size) } characters")
+            print(f"Data split into { len(all_batches) } batches of { humanize.intcomma(min(total_length, batch_size)) } characters")
             print("Split time: {}".format(humanize.precisedelta(dt.timedelta(seconds = time() - start_time))))
             return all_batches, total_length
         
@@ -77,7 +77,7 @@ def submit_batch_job(table_name: str, batch_num: int | None, total_length: int):
             "num_threads": num_threads
         }
     else:
-        name = f"table_name-{ batch_num }"
+        name = f"{ table_name }-{ batch_num }"
         params = {
             "table_name": table_name,
             "num_threads": num_threads,
@@ -114,6 +114,9 @@ def main():
     df = s3.download(path).collect()
     print("Loading time: {}".format(humanize.precisedelta(dt.timedelta(seconds = time() - start_time))))
     
+    # Get dataset metadata
+    metadata = sql.get_metadata(engine, meta, table_name)
+
     # Rename any column called "record_id"
     if "record_id" in df.columns:
         df = df.rename({ "record_id": "record_id_" })
@@ -122,7 +125,9 @@ def main():
         if len(col.strip()) == 0:
             df = df.drop(col)
     # Add record id column
-    df = df.with_row_index("record_id")
+    df = df.with_row_index("record_id", metadata["num_records"])
+    # Update the number of records in sql
+    sql.set_num_records(engine, table_name, metadata["num_records"] + len(df))
     
     # Determine how many batches are in the file
     batches, total_length = data_split_batches(df, table_name)
