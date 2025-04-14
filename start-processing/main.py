@@ -155,8 +155,9 @@ def main():
     if batch_num is not None:
         sql.update_num_batches(engine, table_name, batch_num + len(batches) - 1)
       
-    # Submit processing job to batch      
-    submit_batch_job(table_name, batch_num + 1, total_length)
+    if batch_num is not None:
+        # Submit processing job to batch      
+        submit_batch_job(table_name, batch_num + 1, total_length)
     
     print("Total time: {}".format(humanize.precisedelta(dt.timedelta(seconds = time() - start_time))))
 
