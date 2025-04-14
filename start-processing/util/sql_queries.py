@@ -97,7 +97,7 @@ def get_text_cols(engine: Engine, table_name: str) -> list[str]:
 def update_num_batches(engine: Engine, table_name: str, batch_num: int):
     # Make query
     query = (
-        update(DatasetMetadata.num_batches)
+        update(DatasetMetadata)
             .where(DatasetMetadata.table_name == table_name)
             .values({ "num_batches": batch_num })
     )

@@ -63,11 +63,11 @@ def submit_batch_job(table_name: str, batch_num: int | None, total_length: int):
     if total_length < 10000000:
         batch_queue = os.getenv('BATCH_QUEUE')
         batch_def = os.getenv('BATCH_DEF')
-        num_threads = 4
+        num_threads = "4"
     else:
         batch_queue = os.getenv('BATCH_QUEUE_LARGE')
         batch_def = os.getenv('BATCH_DEF_LARGE')
-        num_threads = 14
+        num_threads = "14"
     
     # Setup input parameters
     if batch_num is None:
@@ -81,7 +81,7 @@ def submit_batch_job(table_name: str, batch_num: int | None, total_length: int):
         params = {
             "table_name": table_name,
             "num_threads": num_threads,
-            "batch_num": batch_num
+            "batch_num": str(batch_num)
         }
 
     # Submit the job
@@ -145,7 +145,7 @@ def main():
     
         if batch_num is None:
             # This is the first set of batches for this dataset
-            batch_num = 0
+            batch_num = 1
             
         for i, batch in enumerate(batches):
             s3.upload(batch, "datasets", table_name, batch_num + i)
@@ -155,9 +155,8 @@ def main():
     if batch_num is not None:
         sql.update_num_batches(engine, table_name, batch_num + len(batches) - 1)
       
-    if batch_num is not None:
-        # Submit processing job to batch      
-        submit_batch_job(table_name, batch_num + 1, total_length)
+    # Submit processing job to batch      
+    submit_batch_job(table_name, batch_num, total_length)
     
     print("Total time: {}".format(humanize.precisedelta(dt.timedelta(seconds = time() - start_time))))
 
