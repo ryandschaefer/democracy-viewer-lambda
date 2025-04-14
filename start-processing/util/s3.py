@@ -191,3 +191,32 @@ def delete_embeddings(table_name: str, token: str | None = None):
             s3_client.delete_objects(Bucket=distributed["bucket"], Delete={"Objects": delete_objects})
     
     print(f"All objects in the directory '{embed_directory}' have been deleted.")
+    
+def delete_temp_upload(table_name: str, batch: str | None = None, token: str | None = None):
+    start_time = time()
+    print("Deleting temporary upload file...")
+    distributed = get_creds(token)
+    
+    if "key_" in distributed.keys() and "secret" in distributed.keys():
+        s3_client = boto3.client(
+            "s3",
+            aws_access_key_id = distributed["key_"],
+            aws_secret_access_key = distributed["secret"],
+            region_name = distributed["region"]
+        )
+    else:
+        s3_client = boto3.client(
+            "s3",
+            region_name = distributed["region"]
+        )
+        
+    if batch is None:
+        path = f"temp_uploads/{ table_name }.csv"
+    else:
+        path = f"temp_uploads/{ table_name }-{ batch }.csv"
+        
+    print(path)
+    response = s3_client.delete_object(Bucket = distributed["bucket"], Key = path)
+    print(response)
+    
+    print("Temp upload deletion time: {}".format(humanize.precisedelta(dt.timedelta(seconds = time() - start_time))))

@@ -154,7 +154,10 @@ def main():
             
         for i, batch in enumerate(batches):
             s3.upload(batch, "datasets", table_name, batch_num + i)
-    print("Upload time: {}".format(humanize.precisedelta(dt.timedelta(seconds = time() - upload_time))))
+    print("Full upload time: {}".format(humanize.precisedelta(dt.timedelta(seconds = time() - upload_time))))
+    
+    # Delete the temporary upload file
+    s3.delete_temp_upload(table_name, batch_num)
             
     # Update the number of batches in sql
     if batch_num is not None:
