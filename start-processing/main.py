@@ -11,7 +11,7 @@ load_dotenv()
 engine, meta = sql_connect()
 
 # Check how many chunks the dataset should be broken into
-def data_split_batches(data: pl.DataFrame, table_name: str) -> list[pl.DataFrame]:
+def data_split_batches(data: pl.DataFrame, table_name: str):
     text_cols = sql.get_text_cols(engine, table_name)
     df = data.clone()
     
@@ -26,7 +26,7 @@ def data_split_batches(data: pl.DataFrame, table_name: str) -> list[pl.DataFrame
     df = df.with_columns(text_col_length_cum_ = pl.col("text_col_length_").cum_sum())
     # Loop until all batches have been found
     i = 1
-    all_batches = []
+    all_batches: list[pl.DataFrame] = []
     while True:
         # Extract next batch
         df_batch = df.filter(
@@ -39,32 +39,46 @@ def data_split_batches(data: pl.DataFrame, table_name: str) -> list[pl.DataFrame
             all_batches.append(df_batch.drop(["text_col_length_", "text_col_length_cum_"]))
         else:
             # Found all batches if no records
-            return all_batches
+            
+            # Return batches with the total text character length of this dataset
+            total_length = df["text_col_length_"].sum()
+            return all_batches, total_length
         
 # Function to submit a batch job to process a dataset or batch
-def submit_batch_job(table_name: str, batch_num: int | None):
+def submit_batch_job(table_name: str, batch_num: int | None, total_length: int):
     # Initialize the AWS Batch client
     batch_client = boto3.client('batch')
     
+    # Choose whether to use a small or large processing environment
+    if total_length < 10000000:
+        batch_queue = os.getenv('BATCH_QUEUE')
+        batch_def = os.getenv('BATCH_DEF')
+        num_threads = 4
+    else:
+        batch_queue = os.getenv('BATCH_QUEUE_LARGE')
+        batch_def = os.getenv('BATCH_DEF_LARGE')
+        num_threads = 14
+    
+    # Setup input parameters
     if batch_num is None:
         name = table_name
         params = {
             "table_name": table_name,
-            "num_threads": 8
+            "num_threads": num_threads
         }
     else:
         name = f"table_name-{ batch_num }"
         params = {
             "table_name": table_name,
-            "num_threads": 8,
+            "num_threads": num_threads,
             "batch_num": batch_num
         }
 
     # Submit the job
     response = batch_client.submit_job(
         jobName=name,
-        jobQueue=os.getenv('BATCH_QUEUE'),
-        jobDefinition=os.getenv('BATCH_DEF'),
+        jobQueue=batch_queue,
+        jobDefinition=batch_def,
         parameters=params
     )
     
@@ -101,7 +115,7 @@ def lambda_handler(event, context):
     df = df.with_row_index("record_id")
     
     # Determine how many batches are in the file
-    batches = data_split_batches(df, table_name)
+    batches, total_length = data_split_batches(df, table_name)
     del df
     
     if len(batches) == 1:
@@ -113,16 +127,20 @@ def lambda_handler(event, context):
             s3.upload(batches[0], "datasets", table_name)
         else:
             # This is adding to an existing dataset
-            s3.upload(batches[0], "datasets", table_name, batch_num + 1)
+            s3.upload(batches[0], "datasets", table_name, batch_num)
     else:
         # Dataset required multiple batches
     
         if batch_num is None:
             # This is the first set of batches for this dataset
-            batch_num = 1
+            batch_num = 0
             
         for i, batch in enumerate(batches):
             s3.upload(batch, "datasets", table_name, batch_num + i)
+            
+    # Update the number of batches in sql
+    if batch_num is not None:
+        sql.update_num_batches(engine, table_name, batch_num + len(batches) - 1)
       
     # Submit processing job to batch      
-    submit_batch_job(table_name, batch_num)
+    submit_batch_job(table_name, batch_num + 1, total_length)
