@@ -67,7 +67,7 @@ def submit_batch_job(table_name: str, batch_num: int | None, total_length: int):
     else:
         batch_queue = os.getenv('BATCH_QUEUE_LARGE')
         batch_def = os.getenv('BATCH_DEF_LARGE')
-        num_threads = "14"
+        num_threads = "15"
     
     # Setup input parameters
     if batch_num is None:

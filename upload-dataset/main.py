@@ -30,11 +30,14 @@ def lambda_handler(event, context):
     # Set POLARS_TEMP_DIR to Lambda's /tmp directory
     os.environ["POLARS_TEMP_DIR"] = "/tmp"
     
+    load_time = time()
+    print("Loading column names...")
     # Lazy load file
     df = s3.download(key)
-    
     # Extract column names
-    columns = df.collect_schema().names()
+    columns = df.columns
+    print("Column load time: {}".format(humanize.precisedelta(dt.timedelta(seconds = time() - load_time))))
+    
     # Remove columns with no name and rename record_id column
     for col in columns:
         if len(col.strip()) == 0:

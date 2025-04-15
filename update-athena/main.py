@@ -4,9 +4,8 @@ from dotenv import load_dotenv
 import humanize
 import os
 from time import time
-import pyarrow.parquet as pq
-import pyarrow.fs as pafs
-import util.athena_queries as athena
+import re
+import util.s3 as s3
 import util.sql_queries as sql
 from util.sql_connect import sql_connect
 from util.email import send_email
@@ -14,47 +13,53 @@ load_dotenv()
 
 engine, meta = sql_connect()
 glue = boto3.client("glue")
-s3 = boto3.client(
-    "s3",
-    region_name = os.environ.get("S3_REGION")
-)
-s3_fs = pafs.S3FileSystem(
-    region=os.environ.get("S3_REGION")
-)
+
+# Check if an athena table alreadys exists
+def athena_table_exists(name: str):
+    try:
+        response = glue.get_table(
+            DatabaseName=os.environ.get("ATHENA_DB"),
+            Name=name
+        )
+        
+        return True
+    except glue.exceptions.EntityNotFoundException:
+        return False
 
 # Convert from pyarrow data types to athena data types
 def arrow_to_glue_type(arrow_type: str) -> str:
     mapping = {
-        "string": "string",
-        "int64": "bigint",
-        "int32": "int",
-        "uint64": "bigint",
-        "uint32": "int",
-        "double": "double",
-        "float": "float",
-        "boolean": "boolean",
-        "timestamp[us]": "timestamp",
-        "timestamp[ns]": "timestamp",
-        "date32[day]": "date"
+        "Utf8": "string",
+        "Int64": "bigint",
+        "Int32": "int",
+        "UInt64": "bigint",
+        "UInt32": "int",
+        "Float64": "double",
+        "Float32": "float",
+        "Boolean": "boolean",
+        "Datetime": "timestamp",
+        "Date": "date"
     }
     return mapping.get(arrow_type, "string")
 
 # Extract schema from parquet file
-def infer_columns_from_parquet(s3_uri: str) -> list[dict[str, str]]:
-    path = s3_uri.replace("s3://", "")
-    with s3_fs.open_input_file(path) as f:
-        table = pq.read_table(f)
-        schema = table.schema
-        columns = []
-        for field in schema:
-            columns.append({
-                "Name": field.name,
-                "Type": arrow_to_glue_type(str(field.type))
-            })
-        return columns
+def infer_columns_from_parquet(name: str) -> list[dict[str, str]]:
+    df = s3.download(name)
+    schema = df.collect_schema()
+    
+    columns = []
+    for col, dtype in schema.items():
+        columns.append({
+            "Name": col,
+            "Type": arrow_to_glue_type(str(dtype))
+        })
+        
+    return columns
 
 # Create a new athena table with the correct schema
-def create_athena_table(table_name: str, file_type: str):
+def create_athena_table(table_name: str, file_type: str, batch_num: int | None = None):
+    start_time = time()
+    
     # Load environment variables
     database = os.environ.get("ATHENA_DB")
     bucket = os.environ.get("S3_BUCKET")
@@ -63,16 +68,15 @@ def create_athena_table(table_name: str, file_type: str):
     athena_table = f"{ file_type }_{ table_name }"
     s3_prefix = f"tables/{ athena_table }/"
     s3_location = f"s3://{ bucket }/{ s3_prefix }"
-    
-    # Check for parquet file in s3 location
-    s3_response = s3.list_objects_v2(Bucket = bucket, Prefix = s3_prefix)
-    files = [ obj["Key"] for obj in s3_response.get("Contents", []) if obj["Key"].endswith(".parquet") ]
-    if not files:
-        raise Exception(f"No valid files found in directory '{ s3_prefix }'")
+    print(f"Creating table { athena_table }...")
     
     # Get schema from file
-    s3_uri = f"s3://{ bucket }/{ files[0] }"
-    columns = infer_columns_from_parquet(s3_uri)
+    if batch_num is None:
+        name = f"{ s3_prefix }{ table_name }.parquet"
+    else:
+        name = f"{ s3_prefix }{ table_name }-{ batch_num }.parquet"
+    columns = infer_columns_from_parquet(name)
+    print(columns)
 
     # Parquet file format
     input_format = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
@@ -100,7 +104,7 @@ def create_athena_table(table_name: str, file_type: str):
     
     # Create table
     glue.create_table(DatabaseName=database, TableInput=table_input)
-    print(f"Created new Athena table: {athena_table}")
+    print(f"Created new Athena table: {athena_table} in { humanize.precisedelta(dt.timedelta(seconds = time() - start_time)) }")
 
 def update_sql(table_name: str, file_type: str):
     # Update database and set email template based on which file this is
@@ -133,7 +137,18 @@ def lambda_handler(event, context):
     
     # Get table name from file path
     key = event["Records"][0]["s3"]["object"]["key"]
+    print(key)
     table_name = key.split("/")[-1].replace(".parquet", "")
+    print(f"Table: { table_name }")
+    # Extract batch from table name
+    pattern = re.compile(r"([A-Za-z0-9]+(_[A-Za-z0-9]+)+)-[0-9]+")
+    if pattern.match(table_name):
+        batch_num = table_name.split("-")[-1]
+        table_name = table_name.replace(f"-{ batch_num }", "")
+        batch_num = int(batch_num)
+    else:
+        batch_num = None
+    print(f"Batch: { 'N/A' if batch_num is None else batch_num }")
     # Determine if this is a raw dataset or a tokenized file
     if key.startswith("tables/datasets_"):
         file_type = "datasets"
@@ -143,14 +158,15 @@ def lambda_handler(event, context):
         raise Exception("Unrecognized file type:", key)
     
     # Check if this table has already been created
-    if athena.table_exists(table_name, file_type):
-        print(f"{ file_type }_{ table_name } already uploaded")
+    athena_table_name = f"{ file_type }_{ table_name }"
+    if athena_table_exists(athena_table_name):
+        print(f"{ athena_table_name } already uploaded")
     else:
         # If not, create the table
-        create_athena_table(table_name, file_type)
+        create_athena_table(table_name, file_type, batch_num)
       
-    # Update dataset metadata and send confirmation email  
-    update_sql(table_name, file_type)
+        # Update dataset metadata and send confirmation email  
+        update_sql(table_name, file_type)
     
     print(f"Table created in { humanize.precisedelta(dt.timedelta(seconds = time() - start_time)) }")
     

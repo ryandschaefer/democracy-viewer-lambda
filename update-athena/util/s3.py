@@ -103,12 +103,16 @@ def upload_file(local_folder: str, s3_folder: str, name: str, token: str | None 
     
 def download(name: str, token: str | None = None) -> pl.LazyFrame:
     distributed = get_creds(token)
+    
+    # Set POLARS_TEMP_DIR to Lambda's /tmp directory
+    os.environ["POLARS_TEMP_DIR"] = "/tmp"
         
     storage_options = {
         "aws_region": distributed["region"],
     }
     s3_path = "s3://{}/{}".format(distributed["bucket"], name)
-    df = pl.scan_csv(s3_path, storage_options=storage_options, n_rows=1)
+    print(s3_path)
+    df = pl.scan_parquet(s3_path, storage_options=storage_options, n_rows=1)
     
     return df
 
