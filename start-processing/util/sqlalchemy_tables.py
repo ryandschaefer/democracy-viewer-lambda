@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, BigInteger, Date, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, BigInteger, Date, ForeignKey, Float
 from sqlalchemy.ext.declarative import declarative_base
 
 SQL_BASE = declarative_base()
@@ -41,7 +41,15 @@ class DatasetMetadata(SQL_BASE):
     reprocess_start = Column("reprocess_start", Boolean)
     num_batches = Column("num_batches", Integer)
     batches_done = Column("batches_done", Integer)
-    
+    compute_clustering = Column("compute_clustering", Boolean)
+    umap_n_neighbors = Column("umap_n_neighbors", Integer)
+    umap_min_dist = Column("umap_min_dist", Float)
+    hdbscan_min_cluster_size = Column("hdbscan_min_cluster_size", Integer)
+    hdbscan_min_samples = Column("hdbscan_min_samples", Integer)
+    collocation_extraction = Column("collocation_extraction", Boolean)
+    lemmatize_collocations = Column("lemmatize_collocations", Boolean)
+    collocations_done = Column("collocations_done", Boolean)
+
 class Tags(SQL_BASE):
     __tablename__ = "tags"
     table_name = Column("table_name", String(100), ForeignKey(DatasetMetadata.table_name), primary_key = True)

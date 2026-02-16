@@ -20,12 +20,11 @@ def get_metadata(engine: Engine, meta: MetaData, table_name: str) -> dict:
     if output is None:
         raise Exception("Query failed")    
     
-    # Give column names as keys
+    # Convert row to dict using column names from the ORM model
     record = {}
-    for i, col in enumerate(meta.tables[DatasetMetadata.__tablename__].columns.keys()):
-        if i < len(output):
-            record[col] = output[i]
-        
+    for col in DatasetMetadata.__table__.columns:
+        record[col.name] = getattr(output, col.name, None)
+
     return record
         
 # Get a user record by email
@@ -41,11 +40,11 @@ def get_user(engine: Engine, meta: MetaData, email: str) -> dict:
             break
         conn.commit()
         
-    # Give column names as keys
+    # Convert row to dict using column names from the ORM model
     record = {}
-    for i, col in enumerate(meta.tables[Users.__tablename__].columns.keys()):
-        record[col] = output[i]
-        
+    for col in Users.__table__.columns:
+        record[col.name] = getattr(output, col.name, None)
+
     return record
 
 # Upload temporary columns for a dataset
